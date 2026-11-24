@@ -1,0 +1,37 @@
+name: repro
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  repro:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+      - name: Run reproducer
+        run: mvn --batch-mode --no-transfer-progress test 2>&1 | tee build.log
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo '### Results'
+            echo '```text'
+            grep -E 'REPRO (RESULT|LOG)' build.log || echo 'no REPRO lines'
+            echo "renewal/ack failures: $(grep -cE 'SRMSG(18287|00201)' build.log || true)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          grep -E 'REPRO (RESULT|LOG)' build.log || true
+          echo "renewal/ack failures: $(grep -cE 'SRMSG(18287|00201)' build.log || true)"
