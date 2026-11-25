@@ -1,5 +1,7 @@
 package repro;
 
+import com.github.dockerjava.api.model.ExposedPort;
+import com.github.dockerjava.api.model.Ports;
 import io.quarkus.test.common.QuarkusTestResourceLifecycleManager;
 import java.util.List;
 import java.util.Map;
@@ -27,7 +29,13 @@ public class KafkaResource implements QuarkusTestResourceLifecycleManager {
         kafka = new KafkaContainer("apache/kafka:4.2.1")
                 .withEnv("KAFKA_GROUP_SHARE_MIN_RECORD_LOCK_DURATION_MS", "1000")
                 .withEnv("KAFKA_SHARE_COORDINATOR_STATE_TOPIC_REPLICATION_FACTOR", "1")
-                .withEnv("KAFKA_SHARE_COORDINATOR_STATE_TOPIC_MIN_ISR", "1");
+                .withEnv("KAFKA_SHARE_COORDINATOR_STATE_TOPIC_MIN_ISR", "1")
+                // The listener is unauthenticated, so publish it on loopback only.
+                .withCreateContainerCmdModifier(command -> {
+                    Ports ports = new Ports();
+                    ports.bind(ExposedPort.tcp(9092), Ports.Binding.bindIp("127.0.0.1"));
+                    command.getHostConfig().withPortBindings(ports);
+                });
         kafka.start();
         try (Admin admin = Admin.create(Map.of("bootstrap.servers", kafka.getBootstrapServers()))) {
             admin.createTopics(List.of(new NewTopic("orders", 1, (short) 1))).all().get(20, TimeUnit.SECONDS);

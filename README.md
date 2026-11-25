@@ -11,10 +11,17 @@ mvn test
 
 Look for the `REPRO RESULT` and `REPRO LOG` lines:
 
-- `FastProcessingTest` (control, 0.5 s processing, 2 s lock): `first=1 second=1`.
-- `SlowProcessingTest` (3 s processing, 2 s lock, renewal check every 500 ms): the first record's handler
-  ran 1 to 5 times across runs; the second record was acknowledged by the broker, but its handler was not
-  invoked within 45 s in any run. When the first record's handler ran more than once, the invocations did not
+Each result reports handler invocations started and completed, and whether handling settled
+(every invocation completed and nothing changed for 10 s) or did not settle within the time limit.
+
+- `FastProcessingTest` (control, 0.5 s processing, 10 s lock, so renewal never starts) asserts that each
+  record is handled exactly once and settles: `started=1 completed=1 (settled)` for both records.
+  With a 2 s lock instead, this control failed intermittently: in one of two local runs, the second record
+  was handled 5 times despite 0.5 s processing, with the same renewal failures. Renewal is scheduled relative
+  to when the connector received the record, so with a short lock it can start before a fast handler finishes.
+- `SlowProcessingTest` (3 s processing, 2 s lock, renewal check every 500 ms) only reports: the first record's
+  handler ran 1 to 5 times across runs; the second record was acknowledged by the broker, but its handler was
+  not invoked within 45 s in any run (`started=0 completed=0 (not settled in time)`). When the first record's handler ran more than once, the invocations did not
   overlap and the delivery count increased. After the first failure, `SRMSG18287 ... The record cannot be
   acknowledged` repeats on every renewal interval until the test ends.
 

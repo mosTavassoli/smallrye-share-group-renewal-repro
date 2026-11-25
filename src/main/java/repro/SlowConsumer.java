@@ -16,6 +16,7 @@ import org.eclipse.microprofile.reactive.messaging.Incoming;
 public class SlowConsumer {
 
     public static final Map<String, AtomicInteger> INVOCATIONS = new ConcurrentHashMap<>();
+    public static final Map<String, AtomicInteger> COMPLETED = new ConcurrentHashMap<>();
     public static final List<String> LOG = new CopyOnWriteArrayList<>();
 
     @ConfigProperty(name = "repro.processing-ms")
@@ -31,6 +32,7 @@ public class SlowConsumer {
         LOG.add(String.format("%d start payload=%s offset=%d deliveryCount=%d thread=%s",
                 start, payload, metadata.getOffset(), deliveryCount, Thread.currentThread().getName()));
         Thread.sleep(processingMs);
+        COMPLETED.computeIfAbsent(payload, p -> new AtomicInteger()).incrementAndGet();
         LOG.add(String.format("%d end   payload=%s offset=%d deliveryCount=%d thread=%s",
                 System.currentTimeMillis(), payload, metadata.getOffset(), deliveryCount,
                 Thread.currentThread().getName()));
