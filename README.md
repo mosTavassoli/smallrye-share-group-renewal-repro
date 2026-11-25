@@ -18,12 +18,30 @@ Each result reports handler invocations started and completed, and whether handl
   record is handled exactly once and settles: `started=1 completed=1 (settled)` for both records.
   With a 2 s lock instead, this control failed intermittently: in one of two local runs, the second record
   was handled 5 times despite 0.5 s processing, with the same renewal failures. Renewal is scheduled relative
-  to when the connector received the record, so with a short lock it can start before a fast handler finishes.
+  to when the connector received the record, and a record counts as in progress until its acknowledgement is
+  committed, so with a short lock renewal can start after a fast handler has finished (see the timeline
+  experiment below).
 - `SlowProcessingTest` (3 s processing, 2 s lock, renewal check every 500 ms) only reports: the first record's
   handler ran 1 to 5 times across runs; the second record was acknowledged by the broker, but its handler was
   not invoked within 45 s in any run (`started=0 completed=0 (not settled in time)`). When the first record's handler ran more than once, the invocations did not
   overlap and the delivery count increased. After the first failure, `SRMSG18287 ... The record cannot be
   acknowledged` repeats on every renewal interval until the test ends.
+
+## Timeline experiment (opt-in)
+
+`ShortLockTimelineExperimentTest` repeats the short-lock setup (0.5 s processing, 2 s lock, 500 ms renewal
+interval) with debug logging for `io.smallrye.reactive.messaging.kafka`, and prints handler start and end times
+in the same clock format as the log. It does not assert; it fails intermittently (1 of 9 local runs), so run it
+several times:
+
+```sh
+mvn test -Dtest=ShortLockTimelineExperimentTest -Drepro.experiment=true
+```
+
+Compare the `TIMELINE handler` lines with `SRMSG18290` (renewal), `SRMSG18286` (acknowledgement committed), and
+`SRMSG18287` (failure). In the failing run, a renewal counted the record as in progress after its handler had
+finished but before its acknowledgement was committed, and the handler then ran again with the same delivery
+count (1).
 
 Timings are scaled down so it runs in about two minutes. Similar behavior was observed with Kafka's default
 30 s lock, SmallRye's default 5 s renewal-check interval, and 40 s of processing.
